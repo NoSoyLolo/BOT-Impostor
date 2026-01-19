@@ -86,29 +86,40 @@ async def on_ready():
     print(f'Bot conectado como {bot.user}')
 
 @bot.command()
-async def jugar(ctx, cantidad_impostores: int = 1):
+async def jugar(ctx, *args):
+    # jugadores mencionados
     jugadores = ctx.message.mentions
-
     if not jugadores:
         await ctx.send("⚠️ Usá: `!jugar [cantidad_impostores] @jugador1 @jugador2 ...` (si no pones número, es 1)")
         return
 
-    # Normalizar cantidad de impostores
+    # cantidad por default
+    cantidad_impostores = 1
+
+    # si el primer argumento es un número, lo tomamos como cantidad
+    # (si no hay args o el primero es una mención, se queda en 1)
+    if len(args) > 0:
+        try:
+            # args[0] puede ser "2" o "<@...>" etc.
+            cantidad_impostores = int(args[0])
+        except (ValueError, TypeError):
+            cantidad_impostores = 1
+
     if cantidad_impostores < 1:
         cantidad_impostores = 1
 
-    # No puede haber tantos impostores (dejamos al menos 1 inocente)
+    # no puede haber tantos impostores (dejamos al menos 1 inocente)
     max_impostores = max(1, len(jugadores) - 1)
     if cantidad_impostores > max_impostores:
         cantidad_impostores = max_impostores
 
-    # Elegir impostores (sin repetir)
+    # elegir impostores
     impostores = random.sample(jugadores, k=cantidad_impostores)
     impostor_ids = {u.id for u in impostores}
 
-    # Elegir tema (personaje o videojuego)
+    # elegir tema y pista
     elegido = random.choice(lista)
-    pista = obtener_pista(elegido)  # "Personaje" o "Videojuego"
+    pista = "Videojuego" if elegido in VIDEOJUEGOS else "Personaje"
     search_url = duckduckgo_image_search_url(elegido)
 
     enviados = []
@@ -129,26 +140,25 @@ async def jugar(ctx, cantidad_impostores: int = 1):
                 )
 
             enviados.append(user.mention)
+            await asyncio.sleep(0.7)
 
         except discord.Forbidden:
             fallidos.append(user.mention)
         except discord.HTTPException:
             fallidos.append(user.mention)
 
-    # Orden aleatorio de turnos (no revela impostores)
+    # orden random (sin revelar impostores)
     orden = jugadores.copy()
     random.shuffle(orden)
     orden_texto = "\n".join([f"{i+1}. {u.mention}" for i, u in enumerate(orden)])
 
-    # Mensaje en el canal (sin revelar impostores)
     msg = "✅ **Juego iniciado. Revisen sus mensajes privados.**\n"
     msg += f"🕵️ **Cantidad de impostores:** {cantidad_impostores}\n\n"
 
     if enviados:
         msg += f"📩 Mensajes enviados a: {' '.join(enviados)}\n\n"
 
-    msg += "🕒 **Orden de juego:**\n"
-    msg += orden_texto + "\n\n"
+    msg += "🕒 **Orden de juego:**\n" + orden_texto + "\n\n"
 
     if fallidos:
         msg += f"⛔ No pude enviar DM a: {' '.join(fallidos)} (DMs cerrados o error)"
