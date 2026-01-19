@@ -86,36 +86,45 @@ async def on_ready():
     print(f'Bot conectado como {bot.user}')
 
 @bot.command()
-async def jugar(ctx):
+async def jugar(ctx, cantidad_impostores: int = 1):
     jugadores = ctx.message.mentions
 
     if not jugadores:
-        await ctx.send("⚠️ Usá: `!jugar @jugador1 @jugador2 ...`")
+        await ctx.send("⚠️ Usá: `!jugar [cantidad_impostores] @jugador1 @jugador2 ...` (si no pones número, es 1)")
         return
 
-    # Elegir impostor al azar
-    impostor = random.choice(jugadores)
+    # Normalizar cantidad de impostores
+    if cantidad_impostores < 1:
+        cantidad_impostores = 1
 
-    # Elegir personaje para los NO impostores
-    personaje_elegido = random.choice(lista)
-    search_url = duckduckgo_image_search_url(personaje_elegido)
-    pista = obtener_pista(personaje_elegido)
+    # No puede haber tantos impostores (dejamos al menos 1 inocente)
+    max_impostores = max(1, len(jugadores) - 1)
+    if cantidad_impostores > max_impostores:
+        cantidad_impostores = max_impostores
+
+    # Elegir impostores (sin repetir)
+    impostores = random.sample(jugadores, k=cantidad_impostores)
+    impostor_ids = {u.id for u in impostores}
+
+    # Elegir tema (personaje o videojuego)
+    elegido = random.choice(lista)
+    pista = obtener_pista(elegido)  # "Personaje" o "Videojuego"
+    search_url = duckduckgo_image_search_url(elegido)
 
     enviados = []
     fallidos = []
 
     for user in jugadores:
         try:
-            # Mensaje para el impostor
-            if user.id == impostor.id:
+            if user.id in impostor_ids:
                 await user.send(
-        "🕵️‍♂️ **Eres el IMPOSTOR**\n\n"
-        f"🔍 **Pista:** {pista}\n"
-        "No sabes el personaje exacto."
-    )
+                    "🕵️‍♂️ **Eres el IMPOSTOR**\n"
+                    f"🔍 **Pista:** {pista}\n"
+                    "No conoces el nombre exacto."
+                )
             else:
                 await user.send(
-                    f"🎭 **Se juega con:** {personaje_elegido}\n"
+                    f"🎭 **Se juega con:** {elegido}\n"
                     f"🖼️ Imágenes: {search_url}"
                 )
 
@@ -126,15 +135,14 @@ async def jugar(ctx):
         except discord.HTTPException:
             fallidos.append(user.mention)
 
+    # Orden aleatorio de turnos (no revela impostores)
     orden = jugadores.copy()
     random.shuffle(orden)
+    orden_texto = "\n".join([f"{i+1}. {u.mention}" for i, u in enumerate(orden)])
 
-    orden_texto = "\n".join(
-        [f"{i+1}. {user.mention}" for i, user in enumerate(orden)]
-    )
-
-    # Mensaje en el canal (sin revelar impostor)
-    msg = "✅ **Juego iniciado. Revisen sus mensajes privados.**\n\n"
+    # Mensaje en el canal (sin revelar impostores)
+    msg = "✅ **Juego iniciado. Revisen sus mensajes privados.**\n"
+    msg += f"🕵️ **Cantidad de impostores:** {cantidad_impostores}\n\n"
 
     if enviados:
         msg += f"📩 Mensajes enviados a: {' '.join(enviados)}\n\n"
@@ -146,7 +154,6 @@ async def jugar(ctx):
         msg += f"⛔ No pude enviar DM a: {' '.join(fallidos)} (DMs cerrados o error)"
 
     await ctx.send(msg)
-
-
+    
 TOKEN = os.getenv("TOKEN")
 bot.run(TOKEN)
